@@ -1,0 +1,831 @@
+This document provides a comprehensive guide for implementing the "optflow" algorithm used by
+Insta360 SDK for seamless dual fisheye stitching. The implementation follows a two-phase approach:
+Python prototyping for algorithm validation, followed by C++ optimization for production performance.
+The optical flow algorithm addresses the core challenge of creating seamless equirectangular
+panoramas from dual fisheye cameras by analyzing pixel-level motion in overlapping regions and
+using this information to guide intelligent seam detection and blending[^22].
+The optical flow stitching algorithm is Insta360's implementation of dense optical flow-based seam
+detection and blending for dual fisheye cameras[22]. Unlike traditional template-based stitching,
+optical flow analyzes actual pixel motion to create seamless transitions between the left and right
+fisheye images[^25].
+Key Advantages:
+Optical Flow-Based Dual Fisheye Stitching:
+Complete Development Guide
+Table of Contents
+Executive Summary
+1. Algorithm Overview
+2. Implementation Pipeline
+3. Python Implementation
+4. C++ Production Implementation
+5. Parameter Tuning and Optimization
+6. Quality Assessment and Validation
+7. Integration with Insta360 Workflow
+8. Troubleshooting and Common Issues
+9. Future Enhancements
+10. Conclusion
+References
+Executive Summary
+[1]
+1. Algorithm Overview
+1.1 What is the "OptFlow" Algorithm?
+19][
+Motion-aware stitching: Handles moving objects crossing seam boundaries[25]22][
+Computational Hierarchy (Insta360's ranking)[^19]:
+The algorithm operates on the optical flow equation[ 96]:
+Where:
+For dual fisheye stitching, we adapt this to handle overlapping regions between equirectangular
+projections of left and right fisheye images[61].
+Input: Dual Fisheye Images (Left + Right)
+    ↓
+[Step 1] Fisheye Distortion Correction
+    ↓
+[Step 2] Equirectangular Projection  
+    ↓
+[Step 3] Coarse Alignment
+    ↓
+[Step 4] Overlap Region Detection
+    ↓
+[Step 5] Optical Flow Computation
+    ↓
+[Step 6] Flow-Guided Seam Detection
+    ↓
+[Step 7] Multi-band Blending
+    ↓
+Output: Seamless Equirectangular Panorama
+Parallax handling: Better performance with near-field objects compared to template stitching[
+28]
+19]
+[
+Adaptive seam placement: Seam location adapts to scene content rather than fixed
+geometry[58]13][
+1. AI Stitching (highest quality, slowest)
+2. Optical Flow Stitching (high quality, moderate speed) ← Target Algorithm
+3. Dynamic Stitching (good quality, faster)
+4. Template Stitching (basic quality, fastest)
+1.2 Technical Foundation
+87][
+ are spatial image gradients
+ is temporal gradient
+ is the motion vector to be determined
+13][
+2. Implementation Pipeline
+2.1 Complete Workflow
+For Python Prototype:
+For C++ Production:
+Dependencies:
+pip install opencv-python&gt;=4.5.0
+pip install numpy&gt;=1.21.0
+pip install scipy&gt;=1.7.0
+pip install matplotlib&gt;=3.3.0
+System Requirements:
+import cv2
+import numpy as np
+from typing import Tuple, Dict, Optional
+class FisheyeProcessor:
+    """Handles fisheye camera calibration and equirectangular conversion"""
+    
+    def __init__(self, camera_params: Dict):
+        self.camera_matrix = np.array(camera_params['camera_matrix'])
+        self.distortion_coeffs = np.array(camera_params['distortion_coeffs'])
+        self.fov_degree = camera_params.get('fov_degree', 190)
+        self.output_width = camera_params.get('output_width', 1920)
+        self.output_height = camera_params.get('output_height', 960)
+        
+    def fisheye_to_equirectangular(self, fisheye_img: np.ndarray) -&gt; np.ndarray:
+        """Convert fisheye image to equirectangular projection"""
+2.2 Algorithm Selection Strategy
+Primary: Farneback Dense Optical Flow[161] (good balance of speed/quality)87][
+Secondary: Lucas-Kanade Pyramidal[92] (for feature tracking validation)87][
+Primary: Optimized Farneback with GPU acceleration
+Fallback: RLOF (Robust Local Optical Flow)[^87] for challenging lighting conditions
+3. Python Implementation
+3.1 Environment Setup
+Python ≥ 3.8
+RAM: 4-8GB minimum
+Processing: ~5-10 seconds per 4K frame
+3.2 Core Implementation Classes
+3.2.1 Fisheye Calibration and Unwarp
+        h, w = fisheye_img.shape[:2]
+        
+        # Create coordinate maps for equirectangular output
+        eq_width, eq_height = self.output_width, self.output_height
+        
+        # Generate longitude and latitude maps
+        lon_map = np.linspace(-np.pi, np.pi, eq_width)
+        lat_map = np.linspace(np.pi/2, -np.pi/2, eq_height)
+        
+        # Create meshgrid
+        lon_grid, lat_grid = np.meshgrid(lon_map, lat_map)
+        
+        # Convert to 3D coordinates
+        x_3d = np.cos(lat_grid) * np.cos(lon_grid)
+        y_3d = np.cos(lat_grid) * np.sin(lon_grid)  
+        z_3d = np.sin(lat_grid)
+        
+        # Project to fisheye coordinates
+        r = np.sqrt(x_3d**2 + y_3d**2)
+        theta = np.arctan2(r, z_3d)
+        
+        # Apply fisheye projection model
+        r_fisheye = theta * (h / 2) / (self.fov_degree * np.pi / 360)
+        phi = np.arctan2(y_3d, x_3d)
+        
+        # Convert to pixel coordinates
+        fisheye_x = (w / 2) + r_fisheye * np.cos(phi)
+        fisheye_y = (h / 2) + r_fisheye * np.sin(phi)
+        
+        # Remap the image
+        map_x = fisheye_x.astype(np.float32)
+        map_y = fisheye_y.astype(np.float32)
+        
+        equirect_img = cv2.remap(fisheye_img, map_x, map_y, 
+                                cv2.INTER_LINEAR, cv2.BORDER_CONSTANT)
+        
+        return equirect_img
+    
+    def calibrate_from_checkerboard(self, checkerboard_images: list) -&gt; bool:
+        """Auto-calibrate fisheye camera parameters"""
+        # Implementation for automatic calibration using checkerboard patterns
+        # This would use cv2.fisheye.calibrate() function
+        pass
+class OpticalFlowStitcher:
+    """Main class implementing optical flow-based stitching"""
+    
+    def __init__(self, flow_algorithm: str = 'farneback'):
+        self.flow_algorithm = flow_algorithm
+        self.setup_flow_parameters()
+        
+    def setup_flow_parameters(self):
+        """Initialize parameters for different optical flow algorithms"""
+3.2.2 Optical Flow Stitcher
+        if self.flow_algorithm == 'farneback':
+            self.flow_params = {
+                'pyr_scale': 0.5,      # Pyramid scale factor
+                'levels': 3,           # Number of pyramid levels  
+                'winsize': 15,         # Averaging window size
+                'iterations': 3,       # Number of iterations
+                'poly_n': 5,          # Polynomial expansion neighborhood
+                'poly_sigma': 1.2,    # Gaussian sigma for polynomial
+                'flags': 0            # Operation flags
+            }
+        elif self.flow_algorithm == 'lucas_kanade':
+            self.flow_params = {
+                'winSize': (15, 15),
+                'maxLevel': 2,
+                'criteria': (cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 10, 0.03)
+            }
+    
+    def compute_optical_flow(self, img1: np.ndarray, img2: np.ndarray, 
+                           mask: Optional[np.ndarray] = None) -&gt; np.ndarray:
+        """Compute optical flow between two images"""
+        
+        # Convert to grayscale for flow computation
+        gray1 = cv2.cvtColor(img1, cv2.COLOR_BGR2GRAY) if len(img1.shape) == 3 else img1
+        gray2 = cv2.cvtColor(img2, cv2.COLOR_BGR2GRAY) if len(img2.shape) == 3 else img2
+        
+        if self.flow_algorithm == 'farneback':
+            flow = cv2.calcOpticalFlowFarneback(
+                gray1, gray2, None,
+                self.flow_params['pyr_scale'],
+                self.flow_params['levels'], 
+                self.flow_params['winsize'],
+                self.flow_params['iterations'],
+                self.flow_params['poly_n'],
+                self.flow_params['poly_sigma'],
+                self.flow_params['flags']
+            )
+            
+        elif self.flow_algorithm == 'lucas_kanade':
+            # For Lucas-Kanade, we need feature points
+            corners = cv2.goodFeaturesToTrack(gray1, 1000, 0.01, 10)
+            if corners is not None:
+                # Track features
+                corners_new, status, error = cv2.calcOpticalFlowPyrLK(
+                    gray1, gray2, corners, None, **self.flow_params
+                )
+                # Convert sparse flow to dense flow (interpolation needed)
+                flow = self._sparse_to_dense_flow(corners, corners_new, 
+                                                 status, gray1.shape)
+            else:
+                flow = np.zeros((gray1.shape[^0], gray1.shape[^1], 2), dtype=np.float32)
+                
+        return flow
+    
+    def _sparse_to_dense_flow(self, corners_old, corners_new, status, img_shape):
+        """Convert sparse Lucas-Kanade flow to dense flow field"""
+        # Create dense flow field from sparse corner matches
+        flow = np.zeros((img_shape[^0], img_shape[^1], 2), dtype=np.float32)
+        
+        # Filter good matches
+        good_old = corners_old[status == 1]
+        good_new = corners_new[status == 1]
+        
+        if len(good_old) &gt; 0:
+            # Calculate displacement vectors
+            displacement = good_new - good_old
+            
+            # Interpolate to create dense field (simple method)
+            for i, (old_pt, disp) in enumerate(zip(good_old, displacement)):
+                x, y = int(old_pt[^0]), int(old_pt[^1])
+                if 0 &lt;= x &lt; img_shape[^1] and 0 &lt;= y &lt; img_shape[^0]:
+                    flow[y, x] = disp
+        
+        # Apply Gaussian smoothing to create smoother dense field
+        flow[:,:,0] = cv2.GaussianBlur(flow[:,:,0], (21, 21), 7)
+        flow[:,:,1] = cv2.GaussianBlur(flow[:,:,1], (21, 21), 7)
+        
+        return flow
+    
+    def detect_overlap_region(self, left_eq: np.ndarray, 
+                             right_eq: np.ndarray) -&gt; Tuple[slice, slice]:
+        """Detect overlapping region between left and right equirectangular images"""
+        height, width = left_eq.shape[:2]
+        
+        # For dual fisheye, overlap is typically on left/right edges
+        overlap_width = width // 6  # Assume ~16.7% overlap on each side
+        
+        # Left image: rightmost portion overlaps
+        left_overlap_region = (slice(0, height), slice(width - overlap_width, width))
+        
+        # Right image: leftmost portion overlaps  
+        right_overlap_region = (slice(0, height), slice(0, overlap_width))
+        
+        return left_overlap_region, right_overlap_region
+    
+    def find_optimal_seam(self, flow: np.ndarray, overlap_mask: np.ndarray) -&gt; np.ndar
+        """Find optimal seam line using optical flow information"""
+        height, width = flow.shape[:2]
+        
+        # Calculate flow magnitude as a cost measure
+        flow_magnitude = np.sqrt(flow[:,:,0]**2 + flow[:,:,1]**2)
+        
+        # Create cost matrix (higher flow = higher cost)
+        cost_matrix = flow_magnitude.copy()
+        
+        # Apply overlap mask
+        cost_matrix = cost_matrix * overlap_mask
+        
+        # Dynamic programming to find minimum cost path
+        dp = np.zeros_like(cost_matrix)
+        dp[0, :] = cost_matrix[0, :]
+        
+        # Fill DP table
+        for i in range(1, height):
+            for j in range(width):
+                candidates = []
+                # Check three possible previous positions
+                for dj in [-1, 0, 1]:
+                    if 0 &lt;= j + dj &lt; width:
+                        candidates.append(dp[i-1, j + dj])
+                dp[i, j] = cost_matrix[i, j] + min(candidates)
+        
+        # Backtrack to find optimal path
+        seam_line = np.zeros(height, dtype=int)
+        seam_line[-1] = np.argmin(dp[-1, :])
+        
+        for i in range(height - 2, -1, -1):
+            prev_j = seam_line[i + 1]
+            candidates = []
+            for dj in [-1, 0, 1]:
+                if 0 &lt;= prev_j + dj &lt; width:
+                    candidates.append((dp[i, prev_j + dj], prev_j + dj))
+            seam_line[i] = min(candidates)[^1]
+        
+        return seam_line
+    
+    def flow_guided_blending(self, left_img: np.ndarray, right_img: np.ndarray,
+                           flow: np.ndarray, seam_line: np.ndarray, 
+                           blend_width: int = 50) -&gt; np.ndarray:
+        """Perform flow-guided blending along the seam"""
+        height, width = left_img.shape[:2]
+        result = np.zeros_like(left_img)
+        
+        for i in range(height):
+            seam_pos = seam_line[i]
+            
+            # Left side of seam: use left image
+            if seam_pos &gt; blend_width:
+                result[i, :seam_pos-blend_width] = left_img[i, :seam_pos-blend_width]
+            
+            # Right side of seam: use right image  
+            if seam_pos + blend_width &lt; width:
+                result[i, seam_pos+blend_width:] = right_img[i, seam_pos+blend_width:]
+            
+            # Blending region: use flow-weighted combination
+            blend_start = max(0, seam_pos - blend_width)
+            blend_end = min(width, seam_pos + blend_width)
+            
+            for j in range(blend_start, blend_end):
+                # Calculate blending weight based on distance to seam and flow magnitude
+                dist_to_seam = abs(j - seam_pos)
+                flow_mag = np.sqrt(flow[i, j, 0]**2 + flow[i, j, 1]**2)
+                
+                # Weight decreases with distance and increases with flow magnitude
+                alpha = (blend_width - dist_to_seam) / blend_width
+                alpha = alpha * (1 + 0.1 * flow_mag)  # Flow-based adjustment
+                alpha = np.clip(alpha, 0, 1)
+                
+                if j &lt; seam_pos:
+                    # Blend towards left image
+                    result[i, j] = alpha * left_img[i, j] + (1 - alpha) * right_img[i, j]
+                else:
+                    # Blend towards right image
+                    result[i, j] = (1 - alpha) * left_img[i, j] + alpha * right_img[i, j]
+        
+        return result
+    
+    def stitch_images(self, left_fisheye: np.ndarray, right_fisheye: np.ndarray,
+                     fisheye_processor: FisheyeProcessor) -&gt; np.ndarray:
+        """Complete stitching pipeline"""
+        
+        # Step 1: Convert fisheye to equirectangular
+        left_eq = fisheye_processor.fisheye_to_equirectangular(left_fisheye)
+        right_eq = fisheye_processor.fisheye_to_equirectangular(right_fisheye)
+        
+        # Step 2: Detect overlap regions
+        left_overlap, right_overlap = self.detect_overlap_region(left_eq, right_eq)
+        
+        # Extract overlap regions
+        left_overlap_img = left_eq[left_overlap]
+        right_overlap_img = right_eq[right_overlap]
+        
+        # Step 3: Compute optical flow in overlap region
+        flow = self.compute_optical_flow(left_overlap_img, right_overlap_img)
+        
+        # Step 4: Find optimal seam
+        overlap_mask = np.ones(left_overlap_img.shape[:2], dtype=np.float32)
+        seam_line = self.find_optimal_seam(flow, overlap_mask)
+        
+        # Step 5: Create full panorama canvas
+        pano_height = left_eq.shape[^0]
+        pano_width = left_eq.shape[^1] + right_eq.shape[^1] - left_overlap_img.shape[^1]
+        panorama = np.zeros((pano_height, pano_width, 3), dtype=np.uint8)
+        
+        # Place left image
+        left_end = left_eq.shape[^1] - left_overlap_img.shape[^1]
+        panorama[:, :left_end] = left_eq[:, :left_end]
+        
+        # Place right image  
+        right_start = left_end + left_overlap_img.shape[^1]
+        panorama[:, right_start:] = right_eq[:, left_overlap_img.shape[^1]:]
+        
+        # Step 6: Blend overlap region
+        blended_overlap = self.flow_guided_blending(
+            left_overlap_img, right_overlap_img, flow, seam_line
+        )
+        panorama[:, left_end:left_end + left_overlap_img.shape[^1]] = blended_overlap
+        
+        return panorama
+def main():
+    # Camera calibration parameters (example for Insta360 X4)
+    camera_params = {
+        'camera_matrix': [[1000, 0, 960], [0, 1000, 960], [0, 0, 1]],
+        'distortion_coeffs': [-0.1, 0.05, 0, 0],
+        'fov_degree': 195,
+        'output_width': 1920,
+        'output_height': 960
+    }
+    
+    # Initialize processors
+    fisheye_proc = FisheyeProcessor(camera_params)
+    stitcher = OpticalFlowStitcher('farneback')
+    
+    # Load dual fisheye images
+    left_fisheye = cv2.imread('left_fisheye.jpg')
+    right_fisheye = cv2.imread('right_fisheye.jpg')
+    
+    # Perform stitching
+    panorama = stitcher.stitch_images(left_fisheye, right_fisheye, fisheye_proc)
+    
+    # Save result
+    cv2.imwrite('panorama_optflow.jpg', panorama)
+    
+    print("Optical flow stitching completed!")
+if __name__ == "__main__":
+    main()
+Target Specifications:
+3.3 Usage Example
+4. C++ Production Implementation
+4.1 Performance Requirements
+Resolution: 4K+ (3840×1920 and above)
+Processing Time: 100-500ms per frame
+Memory Usage: 1-2GB RAM maximum
+Throughput: 10-30 FPS for real-time video processing
+4.2 Optimization Strategies
+#include &lt;opencv2/opencv.hpp&gt;
+#include &lt;opencv2/cudaimgproc.hpp&gt;
+#include &lt;opencv2/cudaarithm.hpp&gt;
+#include &lt;opencv2/cudaoptflow.hpp&gt;
+class CudaOpticalFlowStitcher {
+private:
+    cv::cuda::GpuMat d_frame1, d_frame2, d_flow;
+    cv::Ptr&lt;cv::cuda::FarnebackOpticalFlow&gt; farneback;
+    
+public:
+    CudaOpticalFlowStitcher() {
+        // Initialize CUDA Farneback optical flow
+        farneback = cv::cuda::FarnebackOpticalFlow::create(
+            3,      // numLevels
+            0.5,    // pyrScale  
+            false,  // fastPyramids
+            15,     // winSize
+            3,      // numIters
+            5,      // polyN
+            1.2,    // polySigma
+            0       // flags
+        );
+    }
+    
+    cv::Mat computeOpticalFlowGPU(const cv::Mat&amp; frame1, const cv::Mat&amp; frame2) {
+        // Upload to GPU
+        d_frame1.upload(frame1);
+        d_frame2.upload(frame2);
+        
+        // Compute optical flow on GPU
+        farneback-&gt;calc(d_frame1, d_frame2, d_flow);
+        
+        // Download result
+        cv::Mat flow;
+        d_flow.download(flow);
+        
+        return flow;
+    }
+};
+#include &lt;thread&gt;
+#include &lt;future&gt;
+#include &lt;queue&gt;
+#include &lt;mutex&gt;
+class ThreadedOpticalFlowStitcher {
+private:
+    std::queue&lt;cv::Mat&gt; input_queue;
+    std::queue&lt;cv::Mat&gt; output_queue;
+4.2.1 CUDA Acceleration
+4.2.2 Multi-threading Architecture
+    std::mutex queue_mutex;
+    bool processing_active;
+    
+    // Thread pool for parallel processing
+    std::vector&lt;std::thread&gt; worker_threads;
+    const int num_threads;
+    
+public:
+    ThreadedOpticalFlowStitcher(int threads = std::thread::hardware_concurrency()) 
+        : num_threads(threads), processing_active(true) {
+        
+        // Launch worker threads
+        for (int i = 0; i &lt; num_threads; ++i) {
+            worker_threads.emplace_back(&amp;ThreadedOpticalFlowStitcher::workerFunction,
+        }
+    }
+    
+    void workerFunction() {
+        while (processing_active) {
+            cv::Mat input_frame;
+            
+            // Get work from queue
+            {
+                std::lock_guard&lt;std::mutex&gt; lock(queue_mutex);
+                if (!input_queue.empty()) {
+                    input_frame = input_queue.front();
+                    input_queue.pop();
+                }
+            }
+            
+            if (!input_frame.empty()) {
+                // Process frame
+                cv::Mat result = processFrame(input_frame);
+                
+                // Add to output queue
+                {
+                    std::lock_guard&lt;std::mutex&gt; lock(queue_mutex);
+                    output_queue.push(result);
+                }
+            }
+            
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+    }
+    
+    cv::Mat processFrame(const cv::Mat&amp; dual_fisheye) {
+        // Implementation of complete processing pipeline
+        // This would include all steps from Python version but optimized
+        return cv::Mat();
+    }
+};
+class MemoryOptimizedStitcher {
+private:
+    // Pre-allocated buffers to avoid dynamic allocation
+    cv::Mat buffer_left_eq, buffer_right_eq;
+    cv::Mat buffer_overlap_left, buffer_overlap_right;
+    cv::Mat buffer_flow, buffer_result;
+    
+    // Lookup tables for fisheye unwrapping (computed once)
+    cv::Mat map_x_left, map_y_left;
+    cv::Mat map_x_right, map_y_right;
+    
+public:
+    void precomputeLookupTables(const CameraParams&amp; params) {
+        // Pre-compute remap tables for fisheye to equirectangular conversion
+        // This avoids recalculating trigonometric functions for each frame
+        
+        int eq_width = params.output_width;
+        int eq_height = params.output_height;
+        
+        map_x_left.create(eq_height, eq_width, CV_32FC1);
+        map_y_left.create(eq_height, eq_width, CV_32FC1);
+        
+        // Fill lookup tables with pre-computed coordinates
+        for (int y = 0; y &lt; eq_height; ++y) {
+            for (int x = 0; x &lt; eq_width; ++x) {
+                // Convert equirectangular coordinates to fisheye coordinates
+                double longitude = (x / double(eq_width)) * 2.0 * M_PI - M_PI;
+                double latitude = (y / double(eq_height)) * M_PI - M_PI/2.0;
+                
+                // 3D sphere coordinates
+                double x3d = cos(latitude) * cos(longitude);
+                double y3d = cos(latitude) * sin(longitude);
+                double z3d = sin(latitude);
+                
+                // Project to fisheye
+                double r = sqrt(x3d*x3d + y3d*y3d);
+                double theta = atan2(r, z3d);
+                double phi = atan2(y3d, x3d);
+                
+                double r_fisheye = theta * (params.fisheye_height / 2.0) / (params.fov_ra
+                
+                map_x_left.at&lt;float&gt;(y, x) = params.fisheye_center_x + r_fisheye * 
+                map_y_left.at&lt;float&gt;(y, x) = params.fisheye_center_y + r_fisheye * 
+            }
+        }
+    }
+    
+    cv::Mat stitchOptimized(const cv::Mat&amp; left_fisheye, const cv::Mat&amp; right_fis
+        // Use pre-computed lookup tables for fast remapping
+        cv::remap(left_fisheye, buffer_left_eq, map_x_left, map_y_left, 
+                  cv::INTER_LINEAR, cv::BORDER_CONSTANT);
+        cv::remap(right_fisheye, buffer_right_eq, map_x_right, map_y_right,
+                  cv::INTER_LINEAR, cv::BORDER_CONSTANT);
+        
+4.3 Memory Optimization
+        // Continue with optical flow processing using pre-allocated buffers
+        // ... rest of implementation
+        
+        return buffer_result;
+    }
+};
+Parameter Default Range Tuning Guidelines
+pyr_scale 0.5 0.1-
+0.9 Lower values (0.3-0.4) for fine details, higher values (0.6-0.8) for speed
+levels 3 1-5 More levels (4-5) for large motions, fewer levels (2-3) for speed
+winsize 15 5-25 Larger windows (20-25) for noisy images, smaller windows (10-15) for sharp
+details
+iterations 3 1-10 More iterations (5-8) for accuracy, fewer iterations (2-3) for speed
+poly_n 5 3-7 Higher values (7) for smooth regions, lower values (3-5) for textured areas
+poly_sigma 1.2 0.5-
+2.0 Lower values (0.8-1.0) for sharp features, higher values (1.5-2.0) for noise
+For Indoor Scenes (controlled lighting):
+indoor_params = {
+    'pyr_scale': 0.6,     # Higher for efficiency
+    'levels': 3,          # Standard
+    'winsize': 12,        # Smaller for sharp details
+    'iterations': 2,      # Fewer for speed
+    'poly_n': 5,         # Standard
+    'poly_sigma': 1.0    # Lower for sharp features
+}
+For Outdoor Scenes (variable lighting, moving objects):
+outdoor_params = {
+    'pyr_scale': 0.4,     # Lower for fine motion detection
+    'levels': 4,          # More levels for large motions
+    'winsize': 18,        # Larger for robustness
+    'iterations': 4,      # More for accuracy
+    'poly_n': 5,         # Standard
+    'poly_sigma': 1.4    # Higher for noise handling
+}
+5. Parameter Tuning and Optimization
+5.1 Farneback Algorithm Parameters
+5.2 Scene-Specific Optimization
+For High-Speed Motion (sports, action):
+motion_params = {
+    'pyr_scale': 0.3,     # Lower for large displacements
+    'levels': 5,          # Maximum levels
+    'winsize': 20,        # Large window for tracking
+    'iterations': 3,      # Balanced
+    'poly_n': 7,         # Higher for smoothing
+    'poly_sigma': 1.6    # Higher for motion blur
+}
+def evaluate_stitching_quality(panorama: np.ndarray, seam_line: np.ndarray) -&gt; Dict:
+    """Evaluate stitching quality with multiple metrics"""
+    
+    metrics = {}
+    
+    # 1. Seam Visibility Score
+    seam_gradient = calculate_seam_gradient(panorama, seam_line)
+    metrics['seam_visibility'] = np.mean(seam_gradient)
+    
+    # 2. Color Consistency
+    color_diff = calculate_color_difference_across_seam(panorama, seam_line)
+    metrics['color_consistency'] = 1.0 / (1.0 + color_diff)
+    
+    # 3. Structural Similarity (SSIM) in overlap regions
+    ssim_score = calculate_overlap_ssim(panorama, seam_line)
+    metrics['structural_similarity'] = ssim_score
+    
+    # 4. Overall Quality Score (weighted combination)
+    metrics['overall_quality'] = (
+        0.4 * (1.0 - metrics['seam_visibility']) + 
+        0.3 * metrics['color_consistency'] + 
+        0.3 * metrics['structural_similarity']
+    )
+    
+    return metrics
+def benchmark_performance(stitcher, test_images: list) -&gt; Dict:
+    """Benchmark stitching performance across different image types"""
+    
+    results = {
+        'processing_times': [],
+        'memory_usage': [],
+        'quality_scores': []
+    }
+6. Quality Assessment and Validation
+6.1 Stitching Quality Metrics
+6.2 Performance Benchmarking
+    
+    for left_img, right_img in test_images:
+        start_time = time.time()
+        
+        # Monitor memory usage
+        memory_before = psutil.Process().memory_info().rss
+        
+        # Perform stitching
+        panorama = stitcher.stitch_images(left_img, right_img)
+        
+        processing_time = time.time() - start_time
+        memory_after = psutil.Process().memory_info().rss
+        
+        results['processing_times'].append(processing_time)
+        results['memory_usage'].append(memory_after - memory_before)
+        
+        # Evaluate quality (if ground truth available)
+        quality_score = evaluate_stitching_quality(panorama)
+        results['quality_scores'].append(quality_score['overall_quality'])
+    
+    # Calculate statistics
+    results['avg_processing_time'] = np.mean(results['processing_times'])
+    results['avg_memory_usage'] = np.mean(results['memory_usage']) / (1024*1024)  # MB
+    results['avg_quality'] = np.mean(results['quality_scores'])
+    
+    return results
+def process_insv_file(insv_path: str, output_dir: str):
+    """Process Insta360 .insv file using optical flow stitching"""
+    
+    # Extract dual fisheye frames using Insta360 SDK or FFmpeg
+    cmd = f'ffmpeg -i "{insv_path}" -vf "crop=1920:1920:0:0" -q:v 2 "{output_dir}/left_%0
+    os.system(cmd)
+    
+    cmd = f'ffmpeg -i "{insv_path}" -vf "crop=1920:1920:1920:0" -q:v 2 "{output_dir}/righ
+    os.system(cmd)
+    
+    # Initialize stitcher
+    camera_params = get_insta360_x4_params()  # Load calibration
+    fisheye_proc = FisheyeProcessor(camera_params)
+    stitcher = OpticalFlowStitcher('farneback')
+    
+    # Process each frame pair
+    left_files = sorted(glob.glob(f"{output_dir}/left_*.jpg"))
+    right_files = sorted(glob.glob(f"{output_dir}/right_*.jpg"))
+    
+    for left_file, right_file in zip(left_files, right_files):
+        left_img = cv2.imread(left_file)
+        right_img = cv2.imread(right_file)
+        
+7. Integration with Insta360 Workflow
+7.1 .insv File Processing
+        panorama = stitcher.stitch_images(left_img, right_img, fisheye_proc)
+        
+        # Save stitched result
+        frame_num = os.path.basename(left_file).split('_')[^1].split('.')[^0]
+        output_path = f"{output_dir}/panorama_{frame_num}.jpg"
+        cv2.imwrite(output_path, panorama)
+def compare_with_insta360_sdk(test_cases: list):
+    """Compare our optical flow implementation with Insta360 SDK results"""
+    
+    comparison_results = []
+    
+    for test_case in test_cases:
+        # Our implementation
+        our_result = our_stitcher.stitch_images(
+            test_case['left_fisheye'], 
+            test_case['right_fisheye']
+        )
+        
+        # Insta360 SDK result (if available)
+        sdk_result = test_case.get('insta360_sdk_result')
+        
+        if sdk_result is not None:
+            # Calculate similarity metrics
+            ssim_score = calculate_ssim(our_result, sdk_result)
+            psnr_score = calculate_psnr(our_result, sdk_result)
+            
+            comparison_results.append({
+                'test_case': test_case['name'],
+                'ssim': ssim_score,
+                'psnr': psnr_score,
+                'visual_similarity': ssim_score &gt; 0.85  # Threshold for acceptable qua
+            })
+    
+    return comparison_results
+Problem Symptoms Solution
+Visible Seam LinesObvious stitching
+artifacts
+Adjust poly_sigma (increase), optimize seam detection
+algorithm
+Motion Blur in
+Flow Incorrect flow vectors Reduce pyr_scale, increase levels
+Poor PerformanceSlow processing Use GPU acceleration, optimize memory allocation
+Misalignment Objects don't line up Check camera calibration, improve coarse alignment
+7.2 Comparison with Insta360 SDK Results
+8. Troubleshooting and Common Issues
+8.1 Common Problems and Solutions
+Problem Symptoms Solution
+Color DiscontinuityColor shifts across seamImplement color correction, adjust blending weights
+def visualize_optical_flow(flow: np.ndarray) -&gt; np.ndarray:
+    """Create HSV visualization of optical flow"""
+    magnitude, angle = cv2.cartToPolar(flow[..., 0], flow[..., 1])
+    
+    hsv = np.zeros((flow.shape[^0], flow.shape[^1], 3), dtype=np.uint8)
+    hsv[..., 0] = angle * 180 / np.pi / 2
+    hsv[..., 1] = 255
+    hsv[..., 2] = cv2.normalize(magnitude, None, 0, 255, cv2.NORM_MINMAX)
+    
+    flow_vis = cv2.cvtColor(hsv, cv2.COLOR_HSV2BGR)
+    return flow_vis
+def debug_seam_detection(left_overlap: np.ndarray, right_overlap: np.ndarray,
+                        flow: np.ndarray, seam_line: np.ndarray) -&gt; np.ndarray:
+    """Create debug visualization showing seam detection process"""
+    debug_img = np.hstack([left_overlap, right_overlap])
+    
+    # Draw seam line
+    for i, seam_pos in enumerate(seam_line):
+        cv2.circle(debug_img, (seam_pos + left_overlap.shape[^1], i), 2, (0, 255, 0), -1)
+    
+    # Overlay flow visualization
+    flow_vis = visualize_optical_flow(flow)
+    debug_img = cv2.addWeighted(debug_img, 0.7, 
+                               cv2.hstack([flow_vis, flow_vis]), 0.3, 0)
+    
+    return debug_img
+Consider integrating modern deep learning approaches for enhanced quality:
+For real-time applications:
+8.2 Debug Visualization Tools
+9. Future Enhancements
+9.1 Deep Learning Integration
+PWC-Net or RAFT for more accurate optical flow[147]146][
+Neural seam detection using learned features rather than hand-crafted metrics
+Temporal consistency networks for video stitching
+9.2 Real-time Optimization
+ROI-based processing: Only compute optical flow in critical regions
+Adaptive quality: Reduce quality parameters based on processing load
+The optical flow-based stitching algorithm ("optflow") provides superior quality compared to template-
+based methods by intelligently analyzing pixel motion in overlap regions[ 22]. This implementation
+guide provides both prototype Python code for algorithm development and optimized C++ strategies
+for production deployment.
+Key Success Factors:
+By following this comprehensive guide, developers can successfully replicate and potentially improve
+upon Insta360's "optflow" algorithm for seamless dual fisheye stitching applications.
+ Improved method on image stitching based on optical flow algorithm, SAGE Journals, 2020
+[^13] High-quality Panorama Stitching based on Asymmetric Bidirectional Optical Flow, arXiv, 2020
+[^19] Insta360Develop/Desktop-MediaSDK-Cpp, GitHub, 2020
+[^22] Optical Flow Explained: The Key to Seamless Image Stitching, Insta360 Blog
+[^25] Optical Flow Stitching Comes to the Insta360 Air, Insta360 Blog
+[^28] iOS SDK enables integration of Insta360 360 cameras, GitHub, 2020
+[^58] Panorama stitching based on asymmetric bidirectional optical flow, GitHub
+[^61] High-quality Panorama Stitching based on Asymmetric Bidirectional Optical Flow, arXiv
+[^87] Optical Flow in OpenCV (C++/Python), LearnOpenCV, 2021
+[^88] OpenCV optical flow algorithm multi-threaded implementation, Stack Overflow, 2019
+[^92] Optical Flow — OpenCV-Python Tutorials, OpenCV Documentation
+[^96] Optical Flow, OpenCV 3.4 Documentation
+[^124] Camera Calibration and 3D Reconstruction, OpenCV Documentation
+[^126] Fisheye Camera Calibration with OpenCV, GitHub
+[^146] AccFlow: Backward Accumulation for Long-Range Optical Flow, arXiv, 2023
+[^147] MPI-Flow: Learning Realistic Optical Flow with Multiplane Images, arXiv, 2023
+[^161] Python OpenCV - Dense optical flow, GeeksforGeeks, 2020
+Frame skipping: Process keyframes and interpolate intermediate results
+9.3 Advanced Calibration
+Online calibration: Adapt camera parameters based on scene content
+Multi-camera support: Extend to more than dual fisheye setups
+Distortion learning: Use neural networks to learn camera-specific distortions
+10. Conclusion
+[1]13][
+1. Proper calibration: Accurate fisheye camera parameters are critical[126]124][
+2. Parameter tuning: Scene-specific optimization of optical flow parameters[161]87][
+3. Performance optimization: GPU acceleration and memory management for real-time
+processing[^88]
+4. Quality validation: Continuous testing against reference implementations[25]19][
+References
+[1]
+[2][3][4]
+⁂
+1. https://github.com/BloodyAnt/dualfisheye_to_equirectangular
+2. https://github.com/drNoob13/fisheyeStitcher
+3. https://learnopencv.com/optical-flow-in-opencv/
+4. https://docs.opencv.org/3.4/d4/dee/tutorial_optical_flow.html

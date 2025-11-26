@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OpenStitch AI</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+
+<body>
+    <div class="background-blobs">
+        <div class="blob blob-1"></div>
+        <div class="blob blob-2"></div>
+        <div class="blob blob-3"></div>
+    </div>
+
+    <div class="container">
+        <header>
+            <h1>OpenStitch <span class="highlight">AI</span></h1>
+            <p>Next-Gen Optical Flow Stitching for 360° Cameras</p>
+        </header>
+
+        <main>
+            <div class="upload-container">
+                <div class="drop-zone" id="drop-zone-1" onclick="document.getElementById('file-1').click()">
+                    <div class="icon">📷</div>
+                    <p>Front Lens</p>
+                    <span class="status">No file selected</span>
+                    <input type="file" id="file-1" accept="image/*" hidden>
+                </div>
+                <div class="plus-icon">+</div>
+                <div class="drop-zone" id="drop-zone-2" onclick="document.getElementById('file-2').click()">
+                    <div class="icon">📸</div>
+                    <p>Back Lens</p>
+                    <span class="status">No file selected</span>
+                    <input type="file" id="file-2" accept="image/*" hidden>
+                </div>
+            </div>
+
+            <div class="button-group">
+                <button id="stitch-btn" class="glow-button">
+                    <span class="btn-text">Stitch Images</span>
+                    <div class="loader hidden"></div>
+                </button>
+                <button id="test-btn" class="secondary-button" style="margin-left: 1rem;">
+                    Use Test Images
+                </button>
+            </div>
+
+            <!-- Manual Controls Section -->
+            <div class="manual-controls">
+                <h3>Manual Controls</h3>
+                <div class="control-group">
+                    <label>FOV: <input type="number" id="fov" value="192" step="0.1"></label>
+                    <label>Threshold: <input type="number" id="threshold" value="80" step="1"></label>
+                    <label>Erosion: <input type="number" id="erosion" value="80" step="1"></label>
+                </div>
+                <div class="control-group">
+                    <h4>Front Lens</h4>
+                    <label>Yaw: <input type="number" id="yaw_f" value="0" step="0.1"></label>
+                    <label>Pitch: <input type="number" id="pitch_f" value="0" step="0.1"></label>
+                    <label>Roll: <input type="number" id="roll_f" value="0" step="0.1"></label>
+                </div>
+                <div class="control-group">
+                    <h4>Back Lens</h4>
+                    <label>Yaw: <input type="number" id="yaw_b" value="180" step="0.1"></label>
+                    <label>Pitch: <input type="number" id="pitch_b" value="0" step="0.1"></label>
+                    <label>Roll: <input type="number" id="roll_b" value="0" step="0.1"></label>
+                </div>
+                <button id="customBtn" class="primary-button" style="margin-top: 1rem; width: 100%;">Stitch
+                    Custom</button>
+            </div>
+
+            <div class="result-section glass-panel hidden" id="result-section">
+                <h2>Stitched Result</h2>
+                <div class="image-wrapper">
+                    <img id="result-img" src="" alt="Stitched Result">
+                </div>
+                <a id="download-btn" href="#" download="stitched.jpg" class="secondary-button">Download Result</a>
+            </div>
+
+            <div id="error-div" class="error-msg hidden" style="color: #ff6b6b; margin-top: 1rem; text-align: center;">
+            </div>
+        </main>
+    </div>
+
+    <script src="/static/js/script.js"></script>
+</body>
+
+</html>

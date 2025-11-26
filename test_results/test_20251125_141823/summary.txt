@@ -1,0 +1,25 @@
+Stitching Test Results - 20251125_141823
+================================================================================
+
+
+Image Pair 1:
+  Front: images\test_front.jpg
+  Back: images\test_back.jpg
+  Tests:
+    [baseline] SUCCESS - Current default settings
+    [no_pyramid] SUCCESS - Direct blending without pyramid
+    [linear_weights] SUCCESS - Linear weight falloff (power=1.0)
+    [high_threshold] SUCCESS - Higher threshold to exclude more vignette
+    [sharp_blend] SUCCESS - Very sharp blend (1 pyramid level)
+    [soft_blend] SUCCESS - Softer blend (5 pyramid levels)
+
+Image Pair 2:
+  Front: images\test_front.jpg
+  Back: images\test_back.jpg
+  Tests:
+    [baseline] SUCCESS - Current default settings
+    [no_pyramid] SUCCESS - Direct blending without pyramid
+    [linear_weights] SUCCESS - Linear weight falloff (power=1.0)
+    [high_threshold] SUCCESS - Higher threshold to exclude more vignette
+    [sharp_blend] SUCCESS - Very sharp blend (1 pyramid level)
+    [soft_blend] SUCCESS - Softer blend (5 pyramid levels)
