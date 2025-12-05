@@ -323,4 +323,84 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
     }
+    // Zoom and Pan Controls
+    const zoomInBtn = document.getElementById('zoom-in');
+    const zoomOutBtn = document.getElementById('zoom-out');
+    const zoomResetBtn = document.getElementById('zoom-reset');
+
+    let currentScale = 1;
+    let isDragging = false;
+    let startX, startY, translateX = 0, translateY = 0;
+
+    function updateTransform() {
+        if (resultImg) {
+            resultImg.style.transform = `scale(${currentScale}) translate(${translateX}px, ${translateY}px)`;
+        }
+    }
+
+    if (zoomInBtn) {
+        zoomInBtn.addEventListener('click', () => {
+            currentScale += 0.2;
+            updateTransform();
+        });
+    }
+
+    if (zoomOutBtn) {
+        zoomOutBtn.addEventListener('click', () => {
+            if (currentScale > 0.4) {
+                currentScale -= 0.2;
+                updateTransform();
+            }
+        });
+    }
+
+    if (zoomResetBtn) {
+        zoomResetBtn.addEventListener('click', () => {
+            currentScale = 1;
+            translateX = 0;
+            translateY = 0;
+            updateTransform();
+        });
+    }
+
+    // Pan functionality
+    if (resultImg) {
+        resultImg.addEventListener('mousedown', (e) => {
+            if (currentScale > 1) {
+                isDragging = true;
+                startX = e.clientX - translateX;
+                startY = e.clientY - translateY;
+                resultImg.style.cursor = 'grabbing';
+                e.preventDefault(); // Prevent default drag behavior
+            }
+        });
+
+        window.addEventListener('mousemove', (e) => {
+            if (isDragging) {
+                translateX = e.clientX - startX;
+                translateY = e.clientY - startY;
+                updateTransform();
+            }
+        });
+
+        window.addEventListener('mouseup', () => {
+            if (isDragging) {
+                isDragging = false;
+                resultImg.style.cursor = 'grab';
+            }
+        });
+
+        // Wheel zoom
+        resultImg.addEventListener('wheel', (e) => {
+            if (e.ctrlKey) {
+                e.preventDefault();
+                if (e.deltaY < 0) {
+                    currentScale += 0.1;
+                } else {
+                    if (currentScale > 0.4) currentScale -= 0.1;
+                }
+                updateTransform();
+            }
+        });
+    }
 });

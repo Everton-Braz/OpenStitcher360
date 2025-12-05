@@ -49,6 +49,10 @@
                 <button id="test-btn" class="secondary-button" style="margin-left: 1rem;">
                     Use Test Images
                 </button>
+                <button id="customBtn" class="glow-button"
+                    style="margin-left: 1rem; background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);">
+                    🎛️ Stitch Custom
+                </button>
                 <button id="auto-btn" class="glow-button"
                     style="margin-left: 1rem; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
                     🤖 Auto Stitch (AI)
@@ -56,6 +60,11 @@
                 <button id="optimize-btn" class="primary-button" style="margin-left: 1rem;">
                     ⚡ Optimize Masking
                 </button>
+            </div>
+
+            <!-- Error Display -->
+            <div id="error-div" class="error-message hidden"
+                style="margin-top: 1rem; padding: 1rem; background: rgba(239, 68, 68, 0.2); border: 1px solid #ef4444; border-radius: 8px; color: #fca5a5;">
             </div>
 
             <!-- Auto-Calibrated Parameters Display -->
@@ -117,21 +126,27 @@
                     <label>Mask Aspect: <input type="number" id="mask_aspect_b" value="1.0" step="0.01"
                             title=">1.0 = Squashed (Oval), <1.0 = Stretched"></label>
                 </div>
-
-                <button id="customBtn" class="primary-button" style="margin-top: 1rem; width: 100%;">Stitch
-                    Custom</button>
             </div>
 
-            <div class="result-section glass-panel hidden" id="result-section">
-                <h2>Stitched Result</h2>
-                <div class="image-wrapper">
-                    <img id="result-img" src="" alt="Stitched Result">
+            <!-- Result Section -->
+            <div id="result-section" class="result-section hidden" style="margin-top: 2rem;">
+                <h3 style="margin-bottom: 1rem; color: #22c55e;">🎉 Stitched Result</h3>
+                <div class="result-controls" style="display: flex; gap: 0.5rem; margin-bottom: 1rem;">
+                    <button id="zoom-in" class="secondary-button" style="padding: 0.5rem 1rem;">🔍+</button>
+                    <button id="zoom-out" class="secondary-button" style="padding: 0.5rem 1rem;">🔍-</button>
+                    <button id="zoom-reset" class="secondary-button" style="padding: 0.5rem 1rem;">↩️ Reset</button>
+                    <a id="download-btn" class="glow-button" style="padding: 0.5rem 1rem; text-decoration: none;"
+                        download>
+                        💾 Download
+                    </a>
                 </div>
-                <a id="download-btn" href="#" download="stitched.jpg" class="secondary-button">Download Result</a>
+                <div class="result-image-container"
+                    style="overflow: hidden; border-radius: 12px; background: rgba(0,0,0,0.3);">
+                    <img id="result-img" src="" alt="Stitched panorama"
+                        style="max-width: 100%; cursor: grab; transition: transform 0.2s;">
+                </div>
             </div>
 
-            <div id="error-div" class="error-msg hidden" style="color: #ff6b6b; margin-top: 1rem; text-align: center;">
-            </div>
         </main>
     </div>
 

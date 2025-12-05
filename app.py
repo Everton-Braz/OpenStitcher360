@@ -96,27 +96,27 @@ def stitch_custom():
 
     try:
         # Extract parameters with defaults
-        fov = float(data.get('fov', 200.0))
+        fov = float(data.get('fov', 192.0))
         yaw_f = float(data.get('yaw_f', 0.0))
-        pitch_f = float(data.get('pitch_f', 0.0))
-        roll_f = float(data.get('roll_f', 0.0))
+        pitch_f = float(data.get('pitch_f', 6.0))
+        roll_f = float(data.get('roll_f', 1.1))
         shift_x_f = int(data.get('shift_x_f', 0))
         shift_y_f = int(data.get('shift_y_f', 0))
         mask_radius_f = int(data.get('mask_radius_f', 0))
-        mask_softness_f = int(data.get('mask_softness_f', 0))
+        mask_softness_f = int(data.get('mask_softness_f', 10))
         mask_aspect_f = float(data.get('mask_aspect_f', 1.0))
         
         yaw_b = float(data.get('yaw_b', 180.0))
-        pitch_b = float(data.get('pitch_b', 0.0))
+        pitch_b = float(data.get('pitch_b', 6.0))
         roll_b = float(data.get('roll_b', 0.0))
         shift_x_b = int(data.get('shift_x_b', 0))
         shift_y_b = int(data.get('shift_y_b', 0))
         mask_radius_b = int(data.get('mask_radius_b', 0))
-        mask_softness_b = int(data.get('mask_softness_b', 0))
+        mask_softness_b = int(data.get('mask_softness_b', 10))
         mask_aspect_b = float(data.get('mask_aspect_b', 1.0))
         
-        threshold = int(data.get('threshold', 90))
-        erosion = int(data.get('erosion', 3))
+        threshold = int(data.get('threshold', 31))
+        erosion = int(data.get('erosion', 52))
         color_correction = data.get('color_correction') == 'true'
         
         stitcher.stitch(path1, path2, output_path, 

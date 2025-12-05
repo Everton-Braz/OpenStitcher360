@@ -228,10 +228,10 @@ class Stitcher:
         return ls_
 
     def stitch(self, img1_path, img2_path, output_path, 
-               fov=200.0, 
-               yaw_f=0.0, pitch_f=0.0, roll_f=0.0, shift_x_f=0, shift_y_f=0, mask_radius_f=0, mask_softness_f=0, mask_aspect_f=1.0,
-               yaw_b=180.0, pitch_b=0.0, roll_b=0.0, shift_x_b=0, shift_y_b=0, mask_radius_b=0, mask_softness_b=0, mask_aspect_b=1.0,
-               threshold=90, erosion=3, color_correction=False):
+               fov=192.0, 
+               yaw_f=0.0, pitch_f=6.0, roll_f=1.1, shift_x_f=0, shift_y_f=0, mask_radius_f=0, mask_softness_f=10, mask_aspect_f=1.0,
+               yaw_b=180.0, pitch_b=6.0, roll_b=0.0, shift_x_b=0, shift_y_b=0, mask_radius_b=0, mask_softness_b=10, mask_aspect_b=1.0,
+               threshold=31, erosion=52, color_correction=False):
         
         # 1. Unwarp using FFmpeg with custom parameters
         eq_front_path = output_path.replace(".jpg", "_front.jpg")
